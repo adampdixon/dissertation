@@ -8,17 +8,17 @@ Created on Sat May 16 18:37:08 2020
 
 import os
 import shutil
+import glob
 #set directory location
-dir='/Users/adamdixon/Downloads/for_deletion'
+dir=r'E:\Dropbox\A_School\2020_GrassyMargins\2019_data\UAS_data'
 
+y = [x[0] for x in os.walk(dir)]
 
 for w in y:
     #set which directories wanted, in this case ones that were named NIR or RGB
     if w[-3:] == "NIR" or w[-3:] == "RGB":
-        #print("'["+w+"]',")
         print(w)
         os.mkdir(os.path.join(w, "jpgs"))
-        os.chdir(w)
         pattern = '*.JPG'
         for name in glob.glob(os.path.join(w,pattern)):
             shutil.move(name,os.path.join(w, "jpgs"))
