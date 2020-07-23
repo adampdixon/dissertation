@@ -5,34 +5,11 @@ library(dplyr)
 library(caret)
 library(doParallel)
 
-# clip_raster<-function(S){
-#   #Indices are in the order of NDVI, EVI, SAVI, and water index
-#   buffer_radius<-2050
-#   data_dir<-"/Users/adamdixon/Dropbox/A_School/2020_GrassyMargins/2019_data"
-#   farms<-readOGR(file.path(data_dir,"sites_shp", "sites_w_data_2019.geojson"))
-# 
-#   #######NAIP
-#   NAIP<-brick("/Users/adamdixon/Dropbox/A_School/2020_GrassyMargins/2019_data/NAIP_4analysis/projected/Site_1_32615.tif")
-# 
-#   #get the number of bands for use later on, and save for use in dfAll function
-#   n_dates<-3
-#   # and rename the planet bands for convenience and for further coding
-#   #adding the change data
-#   buff<-gBuffer(farms[S,], width = buffer_radius, capStyle = 'SQUARE')
-#   #perform mask and crop
-#   img_mask<-mask(crop(img, extent(buff)),buff)
-#   # and rename the planet bands for convenience and for further coding
-#   #adding the change data
-#   bands<-c(paste("date_", 1:(n_dates), sep=""),"med","chg","stdev","fourDate","twoDate","DEM")
-#   names(img_mask)=bands
-#   return(img_mask)
-# }
-# 
-# ras_out<-clip_raster(S)
-# 
-# plot(ras_out[[2]])
 
-#don't need above
+outputs<-"/Users/adamdixon/Dropbox/A_School/2020_GrassyMargins/2019_data/planet_processing_someoutputs/all_sites"
+todays_date<-gsub("-","",Sys.Date())
+
+#inputs
 NAIP<-stack("/Users/adamdixon/Dropbox/A_School/2020_GrassyMargins/2019_data/NAIP_4analysis/projected/Site_1_32615.tif")
 data_dir<-"/Users/adamdixon/Dropbox/A_School/2020_GrassyMargins/2019_data"
 farms<-readOGR(file.path(data_dir,"sites_shp", "sites_w_data_2019.geojson"))
@@ -47,25 +24,48 @@ training_clip<-raster::intersect(training, buff)
 plot(buff)
 plot(training_clip)
 
-# 
-# #clipping on raster
-# clipping_training_data<-function(S){
-#   buffer_radius<-2050
-#   data_dir<-"/Users/adamdixon/Dropbox/A_School/2020_GrassyMargins/2019_data"
-#   farms<-readOGR(file.path(data_dir,"sites_shp", "sites_w_data_2019.geojson"))
-#   training<-shapefile("/Users/adamdixon/Dropbox/A_School/2020_GrassyMargins/2019_data/training_data_round2/final_set2/all_boxes_grass_woody_extra.shp")
-#   buff<-gBuffer(farms[S,], width = buffer_radius, capStyle = 'SQUARE')
-#   training_clip<-raster::intersect(training, buff)
-#   return(training_clip)
-# }
-
-
-
 table(training_clip$LC6)
 head(training_clip)
 
 
-#extracting training values from input raster
+make_output_directories()
+
+e<-extract_training(ras = NAIP, train = training_clip)
+table(e$class)
+
+as<-adjust_samples(x = e, classes_col = "class", samples_per_class = 100, crop_perc = 1, noncrop_perc = 1, built_water_perc = .3)
+table(as$class)
+head(as)
+
+
+svm_model(train_samples = as, img_files = NAIP)
+
+plot_lc(b=200)
+
+
+
+make_output_directories<-function(){
+  print("Setting up folder structure")
+  if (dir.exists(file.path(outputs,paste0("landcover_",todays_date))) == F) {
+    dir.create(file.path(outputs,paste0("landcover_",todays_date)))
+  }
+  if (dir.exists(file.path(outputs,paste0("landcover_",todays_date),"training_values")) == F) {
+    dir.create(file.path(outputs,paste0("landcover_",todays_date),"training_values"))
+  }
+  if (dir.exists(file.path(outputs,paste0("landcover_",todays_date),"svm")) == F) {
+    dir.create(file.path(outputs,paste0("landcover_",todays_date),"svm"))
+  }
+  if (dir.exists(file.path(outputs,paste0("landcover_",todays_date),"tifs")) == F) {
+    dir.create(file.path(outputs,paste0("landcover_",todays_date),"tifs"))
+  }
+  if (dir.exists(file.path(outputs,paste0("landcover_",todays_date),"vrt")) == F) {
+    dir.create(file.path(outputs,paste0("landcover_",todays_date),"vrt"))
+  }
+}
+
+
+
+# extracting training values from input raster
 
 extract_training<-function(ras, train){
   img<-ras
@@ -100,11 +100,8 @@ extract_training<-function(ras, train){
   }
   dfAll2<-filter(dfAll, d1 != -3.400000e+38, d2 != -3.400000e+38, d3 != -3.400000e+38)
   return(dfAll2)
+  write.csv(dfAll2, file.path(outputs,paste0("landcover_",todays_date),"training_values","values_extraction.csv"))
 }
-
-e<-extract_training(ras = NAIP, train = training_clip)
-table(e$class)
-
 
 adjust_samples<-function(x, samples_per_class, classes_col,crop_perc, noncrop_perc, built_water_perc){
   for (i in 1:length(unique(x[, classes_col]))){
@@ -141,32 +138,12 @@ adjust_samples<-function(x, samples_per_class, classes_col,crop_perc, noncrop_pe
 }
 
 
-as<-adjust_samples(x = e, classes_col = "class", samples_per_class = 100, crop_perc = 1, noncrop_perc = 1, built_water_perc = .3)
-table(as$class)
-head(as)
-
-
 #SVM CLASSIFICATION
 svm_model<-function(train_samples, img_files, PreProcess = NULL){
   todays_date<-gsub("-","",Sys.Date())
+
   
-  if (dir.exists(paste0("/Users/adamdixon/Dropbox/A_School/2020_GrassyMargins/2019_data/planet_processing_someoutputs/all_sites/landcover_200m_",todays_date)) == F) {
-    dir.create(paste0("/Users/adamdixon/Dropbox/A_School/2020_GrassyMargins/2019_data/planet_processing_someoutputs/all_sites/landcover_200m_",todays_date))
-  }
-  if (dir.exists(paste0("/Users/adamdixon/Dropbox/A_School/2020_GrassyMargins/2019_data/planet_processing_someoutputs/all_sites/landcover_200m_",todays_date)) == F) {
-    dir.create(paste0("/Users/adamdixon/Dropbox/A_School/2020_GrassyMargins/2019_data/planet_processing_someoutputs/all_sites/landcover_200m_",todays_date))
-  }
-  if (dir.exists(paste0("/Users/adamdixon/Dropbox/A_School/2020_GrassyMargins/2019_data/planet_processing_someoutputs/all_sites/landcover_200m_",todays_date,"/svm")) == F) {
-    dir.create(paste0("/Users/adamdixon/Dropbox/A_School/2020_GrassyMargins/2019_data/planet_processing_someoutputs/all_sites/landcover_200m_",todays_date,"/svm"))
-  }
-  if (dir.exists(paste0("/Users/adamdixon/Dropbox/A_School/2020_GrassyMargins/2019_data/planet_processing_someoutputs/all_sites/landcover_200m_",todays_date,"/tifs")) == F) {
-    dir.create(paste0("/Users/adamdixon/Dropbox/A_School/2020_GrassyMargins/2019_data/planet_processing_someoutputs/all_sites/landcover_200m_",todays_date,"/tifs"))
-  }
-  if (dir.exists(paste0("/Users/adamdixon/Dropbox/A_School/2020_GrassyMargins/2019_data/planet_processing_someoutputs/all_sites/landcover_200m_",todays_date,"/vrt")) == F) {
-    dir.create(paste0("/Users/adamdixon/Dropbox/A_School/2020_GrassyMargins/2019_data/planet_processing_someoutputs/all_sites/landcover_200m_",todays_date,"/vrt"))
-  }
-  
-  dir<-paste0("/Users/adamdixon/Dropbox/A_School/2020_GrassyMargins/2019_data/planet_processing_someoutputs/all_sites/landcover_200m_",todays_date)
+  dir<-paste0("/Users/adamdixon/Dropbox/A_School/2020_GrassyMargins/2019_data/planet_processing_someoutputs/all_sites/landcover_",todays_date)
   
   balanced<-train_samples
   nb<-length(img_files@layers) #just grabbing the band number length from img
@@ -209,32 +186,28 @@ svm_model<-function(train_samples, img_files, PreProcess = NULL){
 }
 
 
-svm_model(train_samples = as, img_files = NAIP)
-
-
-print(mod)
-todays_date<-gsub("-","",Sys.Date())
-dir<-paste0("/Users/adamdixon/Dropbox/A_School/2020_GrassyMargins/2019_data/planet_processing_someoutputs/all_sites/landcover_200m_",todays_date)
-lc_out<-raster(file.path(dir,"tifs", "svm.tif"))
-
-buffer_radius<-200
-
-buff200<-gBuffer(farms_select, width = buffer_radius, capStyle = 'SQUARE')
-lc<-mask(crop(lc_out, extent(buff200)),buff200)
-
-if (all(unique(lc) %in% c(1))) {
-  mycol=c("yellow")
-} else if (all(unique(lc) %in%  c(1,2))) {
-  mycol=c("yellow","olivedrab3")
-} else if (all(unique(lc) %in%  c(1,3))) {
-  mycol=c("yellow","gray")
-} else if (all(unique(lc) %in%  c(1,4))) {
-  mycol=c("yellow","blue")
-} else if (all(unique(lc) %in% c(1,2,3))) {
-  mycol=c("yellow","olivedrab3","gray")
+plot_lc<-function(b){
+  lc_out<-raster(file.path(outputs,paste0("landcover_",todays_date),"tifs", "svm.tif"))
+  
+  buffer_radius<-b
+  
+  buff200<-gBuffer(farms_select, width = buffer_radius, capStyle = 'SQUARE')
+  lc<-mask(crop(lc_out, extent(buff200)),buff200)
+  
+  if (all(unique(lc) %in% c(1))) {
+    mycol=c("yellow")
+  } else if (all(unique(lc) %in%  c(1,2))) {
+    mycol=c("yellow","olivedrab3")
+  } else if (all(unique(lc) %in%  c(1,3))) {
+    mycol=c("yellow","gray")
+  } else if (all(unique(lc) %in%  c(1,4))) {
+    mycol=c("yellow","blue")
+  } else if (all(unique(lc) %in% c(1,2,3))) {
+    mycol=c("yellow","olivedrab3","gray")
+  }
+  
+  print(raster::plot(lc, col=mycol, legend=F, ext=raster::extent(lc),axes=F,box=F))
 }
-
-raster::plot(lc, col=mycol, legend=F, ext=raster::extent(lc),axes=F,box=F)
 
 #run svm
 
