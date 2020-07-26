@@ -557,7 +557,7 @@ stopCluster(cl)
 ######################################
 
 ###################################### RESAMPLE DEM
-
+  
 resample_dem<-function(l){
   library(raster)
   ##################
@@ -591,6 +591,9 @@ stopCluster(cl)
 ######################################
 ######################################
 
+library(gdalUtils)
+
+#MAKE VRT FOR DEMS (TPI)
 dem_dir<-"/Users/adamdixon/Dropbox/A_School/2020_GrassyMargins/2019_data/3mDEM/1_tifs"
 tpi_resample_list<-list.files(file.path(dem_dir, "TPI", "clipped","resampled_to_NAIP"), full.names = T)
 
@@ -598,6 +601,37 @@ gdalbuildvrt(tpi_resample_list, file.path(dem_dir,"vrts","tpi_resampled.vrt"))
 
 
 
+#MAKE VRT FOR ENGINEERED FEATURES
+ps_ndvi_eng_feat<-"/Users/adamdixon/Dropbox/A_School/2020_GrassyMargins/2019_data/planet_4analysis/7_evi_stats/resampled_to_NAIP"
+
+vrt_dir<-"/Users/adamdixon/Dropbox/A_School/2020_GrassyMargins/2019_data/planet_4analysis/6_vrts"
+
+change<-list.files(ps_ndvi_eng_feat, pattern = "change", full.names = T)
+gdalbuildvrt(change, file.path(vrt_dir,"evi_resampled_change.vrt"))
 
 
+median<-list.files(ps_ndvi_eng_feat, pattern = "med", full.names = T)
+gdalbuildvrt(median, file.path(vrt_dir,"evi_resampled_median.vrt"))
+
+stdev<-list.files(ps_ndvi_eng_feat, pattern = "stdev", full.names = T)
+gdalbuildvrt(stdev, file.path(vrt_dir,"evi_resampled_stdev.vrt"))
+
+
+naip_dir<-"/Users/adamdixon/Dropbox/A_School/2020_GrassyMargins/2019_data/NAIP_4analysis"
+
+naip_reset<-list.files(file.path(naip_dir,"projected","reset_origin"), full.names = T)
+gdalbuildvrt(naip_reset, file.path(naip_dir,"vrt","naip_reset_origin.vrt"))
+
+
+
+planet_dir<-"/Users/adamdixon/Dropbox/A_School/2020_GrassyMargins/2019_data/planet_4analysis/resampled_to_NAIP"
+#make VRTS for resampled PS indices
+resampled_indices<-list.files(file.path(planet_dir), full.names = F, recursive = F)
+#list with image date order wanted
+
+for (t in c(1:7)){
+  print(t)
+  scenes<-grep(pattern = paste0("^date_",t), resampled_indices, value=TRUE) #, perl=TRUE)
+  gdalbuildvrt(file.path(planet_dir,scenes), output.vrt = file.path(vrt_dir,paste0("evi_resample_all_sites_indices_time_",t,".vrt")))
+}
 

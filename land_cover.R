@@ -7,7 +7,7 @@ library(doParallel)
 
 
 outputs<-"/Users/adamdixon/Dropbox/A_School/2020_GrassyMargins/2019_data/planet_processing_someoutputs/all_sites"
-number<-4
+number<-1  #the site number to process
 todays_date<-gsub("-","",Sys.Date())
 
 ##################################################
@@ -20,24 +20,45 @@ lc_class(outputs, number)
 #COMPONENT FUNCTIONS
 ##################################################
 
-lc_class<-function(outputs, number){ #, ras, farms, number, training, width, classes_col, plot_width, samples_per_class, crop_perc, noncrop_perc, built_water_perc, svm_lc_in_mem, ...){
+lc_class<-function(outputs, number){ #, ras, farms, number, training, width, classes_col, plot_width, samples_per_class, crop_perc, noncrop_perc, built_water_perc, svm_not_complete, ...){
   ###################################################################################################################################
   #inputs
-  ras<-"/Users/adamdixon/Dropbox/A_School/2020_GrassyMargins/2019_data/NAIP_4analysis/vrt/NAIP_32615.vrt"
+  naip<-"/Users/adamdixon/Dropbox/A_School/2020_GrassyMargins/2019_data/NAIP_4analysis/vrt/naip_reset_origin.vrt"
+  tpi<-"/Users/adamdixon/Dropbox/A_School/2020_GrassyMargins/2019_data/3mDEM/1_tifs/vrts/tpi_resampled_to_naip_326215.vrt"
+  evi_date1<-"/Users/adamdixon/Dropbox/A_School/2020_GrassyMargins/2019_data/planet_4analysis/6_vrts/evi_resample_all_sites_indices_time_1.vrt"
+  evi_date2<-"/Users/adamdixon/Dropbox/A_School/2020_GrassyMargins/2019_data/planet_4analysis/6_vrts/evi_resample_all_sites_indices_time_2.vrt"
+  evi_date3<-"/Users/adamdixon/Dropbox/A_School/2020_GrassyMargins/2019_data/planet_4analysis/6_vrts/evi_resample_all_sites_indices_time_3.vrt"
+  evi_date4<-"/Users/adamdixon/Dropbox/A_School/2020_GrassyMargins/2019_data/planet_4analysis/6_vrts/evi_resample_all_sites_indices_time_4.vrt"
+  evi_date5<-"/Users/adamdixon/Dropbox/A_School/2020_GrassyMargins/2019_data/planet_4analysis/6_vrts/evi_resample_all_sites_indices_time_5.vrt"
+  evi_date6<-"/Users/adamdixon/Dropbox/A_School/2020_GrassyMargins/2019_data/planet_4analysis/6_vrts/evi_resample_all_sites_indices_time_6.vrt"
+  evi_date7<-"/Users/adamdixon/Dropbox/A_School/2020_GrassyMargins/2019_data/planet_4analysis/6_vrts/evi_resample_all_sites_indices_time_7.vrt"
+  evi_stdev<-"/Users/adamdixon/Dropbox/A_School/2020_GrassyMargins/2019_data/planet_4analysis/6_vrts/evi_resampled_stdev.vrt"
+  evi_median<-"/Users/adamdixon/Dropbox/A_School/2020_GrassyMargins/2019_data/planet_4analysis/6_vrts/evi_resampled_median.vrt"
+  evi_change<-"/Users/adamdixon/Dropbox/A_School/2020_GrassyMargins/2019_data/planet_4analysis/6_vrts/evi_resampled_change.vrt"
+  
+  ras_list<-c(naip, tpi, evi_date1, evi_date2, evi_date3, evi_date4, evi_date5, evi_date6, evi_date7, evi_stdev, evi_median, evi_change)
+  
+  ras<-stack(ras_list) #make raster object
+  #make chacter vector of names to be used when extracting values from training points to data frame
+  ras_stack_names<-c("naip_nir","naip_red","naip_green", "tpi", "evi_date1", "evi_date2", "evi_date3", "evi_date4", "evi_date5", "evi_date6", "evi_date7", "evi_stdev", "evi_median", "evi_change")
+  #!!!!!!!!!!THESE ALSO NEED TO BE SET IN THE SVM MODEL. I COULDN'T FIGURE OUT WHY THEY WEREN'T BEING PASSED
+  #set names
+  names(ras)<-ras_stack_names
+  
   farms<-readOGR(file.path("/Users/adamdixon/Dropbox/A_School/2020_GrassyMargins/2019_data","sites_shp", "sites_w_data_2019.geojson"))
   training<-shapefile("/Users/adamdixon/Dropbox/A_School/2020_GrassyMargins/2019_data/training_data_round2/final_set2/all_boxes_grass_woody_extra.shp")
   width<-2050
   plot_width<-200
-  samples_per_class <- 200
+  samples_per_class <- 100
   number<-number
   classes_col<-"class"
-  crop_perc <- 1
+  svm_not_complete <- TRUE  #use the LC that is already in memory? FALSE if first time running; I don't know why but this won't get passed on. So make sure and set in the model too.
+  crop_perc <- .8
   noncrop_perc <- 1
-  built_water_perc <- 1
+  built_water_perc <- .8
   bare_perc <- 1
-  svm_lc_in_mem <- "no"
-  clip_ras <- "yes" #clip raster to predict to "plot_width amount?
-  PreProcess <- NULL
+  clip_ras <- TRUE #clip raster to predict to "plot_width amount?
+  PreProcess <- NULL #options are NULL, "pca" or "nzw"
   ##########################################################################################################################################
   #get farm name
   
@@ -48,8 +69,9 @@ lc_class<-function(outputs, number){ #, ras, farms, number, training, width, cla
   train<-training_clip(training, farms, number, width)
   #raster clip
   img_clip<-image_clip(ras, farms, number, width)
-    #extract values, save values
-  e<-extract_training(img_clip, train = train)
+  #extract values, save values
+  e<-extract_training(image_clip = img_clip, train = train, ras_stack_names)
+  length(ras_stack_names)
   table(e$class)
   head(e)
   #adjust values
@@ -57,7 +79,7 @@ lc_class<-function(outputs, number){ #, ras, farms, number, training, width, cla
   table(as$class)
   head(as)
   #run model, save results
-  s<-svm_model(farms, number, plot_width, svm_lc_in_mem, clip_ras, train_samples = as, img_files = img_clip, PreProcess)
+  s<-svm_model(farms, number, ras_stack_names, plot_width, svm_not_complete, clip_ras, train_samples = as, img_files = img_clip, PreProcess)
   #plot outcome
   plot_lc(number, plot_width, farms, img_files =  img_clip)
 }
@@ -103,7 +125,7 @@ image_clip<-function(ras, farms, number, width){
   if (file.exists(file.path(tempdir(), "img_clip.tif"))) {
     m <- stack(file.path(tempdir(), "img_clip.tif"))
     message("using image in temp file")
-  } else {  #raster input
+  } else {  #raster input - single or list of rasters
     ras1<-stack(ras)
     #vector input
     farms_select<-farms[number,]
@@ -126,8 +148,9 @@ image_clip<-function(ras, farms, number, width){
 }
 
 # extracting training values from input raster
-extract_training<-function(image_clip, train){
+extract_training<-function(image_clip, train, ras_stack_names){
   message("extract training data")
+  #check if values have already been extracted
   if (identical(file.exists(file.path(outputs,paste0("landcover_",todays_date),"training_values","values_extraction.csv")), TRUE)){
     message("extraction already completed. moving on...")
     dfAll2<-read.csv(file.path(outputs,paste0("landcover_",todays_date),"training_values","values_extraction.csv"))
@@ -136,14 +159,14 @@ extract_training<-function(image_clip, train){
       trainData<-train
       responseCol<-"LC6"
       #get the number of bands for use later on, and save for use in dfAll function
-      n_dates_bands<-length(image_clip@layers)
+      n_ras_stack_names<-length(ras_stack_names)
       # and rename ndvi for convenience and for further coding
       #adding the change data
-      dates<-c(paste("d", 1:(n_dates_bands), sep=""))
-      names(image_clip)=dates
+      #dates<-c(paste("d", 1:(n_dates_bands), sep=""), ras_stack_names)
+      names(image_clip)=ras_stack_names
       # Extract training data values from stack
       #number of columns will be number of dates + a column for "class"
-      dfAll = setNames(data.frame(matrix(ncol = n_dates_bands+1, nrow = 0)), c(c(dates),"class"))
+      dfAll = setNames(data.frame(matrix(ncol = n_ras_stack_names+1, nrow = 0)), c(ras_stack_names,"class"))
       for (i in 1:length(unique(trainData[[responseCol]]))){
         category <- unique(trainData[[responseCol]])[i]
         categorymap <- trainData[trainData[[responseCol]] == category,]
@@ -160,14 +183,21 @@ extract_training<-function(image_clip, train){
         }
         
       }
-      dfAll2<-filter(dfAll, d1 != -3.400000e+38, d2 != -3.400000e+38, d3 != -3.400000e+38)
+      
+      #dfAll2<-filter(dfAll, d1 != -3.400000e+38, d2 != -3.400000e+38, d3 != -3.400000e+38)
+      
+      #check for missing values
+      bad_values<-which(is.na.data.frame(dfAll))
+      dfAll2<-dfAll[!row.names(dfAll)%in%bad_values,]
+      #check for other way missing values have been showing 
+      which(apply(dfAll2, 1, function(r) any(r %in% c(-3.400000e+38))))#doesn't seem to be a problme
       message("available number of training points:")
       print(table(dfAll2$class))
-      write.csv(dfAll2, "/Users/adamdixon/Dropbox/A_School/2020_GrassyMargins/2019_data/planet_processing_someoutputs/all_sites/landcover_20200723/training_values/values_extraction.csv")
-     
-       #write.csv(dfAll2, file = file.path(outputs,paste0("landcover_",todays_date),"training_values","values_extraction.csv"))
+      write.csv(dfAll2, file.path(outputs, paste0("landcover_",todays_date), "training_values","values_extraction.csv"))
     }
   return(dfAll2)
+  message("available number of training points:")
+  print(table(dfAll2$class))
   message("done with extraction")
 }
     
@@ -228,13 +258,14 @@ adjust_samples<-function(ext_values, samples_per_class, classes_col,crop_perc, n
 
 
 #SVM CLASSIFICATION
-svm_model<-function(farms, number, plot_width, svm_lc_in_mem, clip_ras, train_samples, img_files, PreProcess = NULL){
-  if (identical(svm_lc_in_mem, FALSE)) {
+svm_model<-function(farms, number, plot_width, svm_not_complete = TRUE, clip_ras, train_samples, img_files, PreProcess = NULL, ras_stack_names){
+  if (!identical(svm_not_complete, TRUE)) {
     message("working on SVM")
     balanced<-train_samples
-    nb<-length(img_files@layers) #just grabbing the band number length from img
-    dates<-c(paste("d", 1:nb, sep=""))
-    names(img_files)<-dates
+    #nb<-length(img_files@layers) #just grabbing the band number length from img
+    #dates<-c(paste("d", 1:nb, sep=""), ras_stack_names, "class")
+    # ras_layers<-c(ras_stack_names,"class")
+    # names(img_files)<-ras_layers
     #############################################
     # Create training and testing datasets
     inTrain <- createDataPartition(y = balanced$class, p = 0.7, list = FALSE)
@@ -245,26 +276,31 @@ svm_model<-function(farms, number, plot_width, svm_lc_in_mem, clip_ras, train_sa
     # cluster <- makeCluster(detectCores() - 1) # convention to leave 1 core for OS
     # registerDoParallel(cluster)
     #generate the model equation based on number of band/date variables
-    f <- as.formula(
-      paste("as.factor(class)", 
-            paste("d", 1:(nb), sep = "",collapse = " + "), 
-            sep = " ~ "))
+    # f <- as.formula(
+    #   paste("as.factor(class)", 
+    #         paste("d", 1:(nb), sep = "",collapse = " + "), 
+    #         sep = " ~ "))
+    ras_stack_names<-c("naip_nir","naip_red","naip_green", "tpi", "evi_date1", "evi_date2", "evi_date3", "evi_date4", "evi_date5", "evi_date6", "evi_date7", "evi_stdev", "evi_median", "evi_change")
+    training$class<-as.factor(training$class)
+    class(training$class)
+    f <- formula(paste("class", paste(ras_stack_names,collapse = "+"), sep = "~"))
     set.seed(123)
     ########################SVM is 5 k-fold cross validated###############################
     tc<-trainControl(method = "cv", number = 5, allowParallel = TRUE, savePredictions = T)
     mod.svm <- train(f, method = "svmLinear", data = training, trControl = tc, PreProcess = NULL)
-    # stopCluster(cluster)
-    registerDoSEQ()
+    
     #now testing the accuracy of the model using the testing data
     mod_pred <- predict(mod.svm, testing)
     conf_mat<-confusionMatrix(mod_pred, as.factor(testing$class))
-    
+    plot_width<-200
     #clip raster for prediction
     if (identical(clip_ras, TRUE)){
       farms_select<-farms[number,]
       buff200<-gBuffer(farms_select, width = plot_width, capStyle = 'SQUARE')
       ras2_predict<-mask(crop(img_files, extent(buff200)),buff200)
     } else {ras2_predict<-img_files}
+    
+    names(ras2_predict)<-ras_stack_names
     
     #apply prediction values to raster
     print("Applying predictions to raster stack")
@@ -278,7 +314,7 @@ svm_model<-function(farms, number, plot_width, svm_lc_in_mem, clip_ras, train_sa
     message("done with SVM")
   }
   else {
-    print(paste0("Are we using LC in memory? Answer: ", svm_lc_in_mem))
+    print(paste0("Has LC been put in memory already? Answer: ", svm_not_complete))
     message("svm already done. moving on")
   }
 }
