@@ -6,12 +6,13 @@ library(tictoc)
 ncores<-detectCores(logical = T)
 cl<-makeCluster(ncores-1)
 tic()
-site_number<-c(1:3)
+site_number<-c(1:49)
 clusterApply(cl, site_number, batch_all_lcs)
 stopCluster(cl)
 toc()
 ######################################
 
+# for (i in c(16, 18, 20, 25, 32, 40, 42, 43, 49)){batch_all_lcs(site_number = i)}
 
 #RUN THE BELOW FIRST
 #####################
@@ -56,10 +57,11 @@ batch_all_lcs<-function(site_number){
     
     farms<-readOGR(file.path("/Users/adamdixon/Dropbox/A_School/2020_GrassyMargins/2019_data","sites_shp", "sites_w_data_2019.geojson"))
     training<-shapefile("/Users/adamdixon/Dropbox/A_School/2020_GrassyMargins/2019_data/training_data_round2/final_set2/all_boxes_grass_woody_extra.shp")
+    training<-shapefile("/Users/adamdixon/Dropbox/A_School/2020_GrassyMargins/2019_data/training_data_round2/final_set2/all_boxes_grass_woody_extra_artisinal_adding_27July2020.shp")
     width<-2050
     plot_width<-200   #for some reason not passed. Set below too.
-    samples_per_class <- 200
-    number<-number
+    #samples_per_class <- 200 # this will now be set using a minimum number 
+    #number<-number
     classes_col<-"class"
     svm_not_complete <- TRUE  #use the LC that is already in memory? FALSE if first time running; I don't know why but this won't get passed on. So make sure and set in the model too.
     crop_perc <- 1
@@ -78,18 +80,19 @@ batch_all_lcs<-function(site_number){
     #image clip
     train<-training_clip(training, farms, number, width)
     #raster clip
-    img_clip<-image_clip(ras, farms, number, width, use_temp)
-    #extract values, save values
-    e<-extract_training(image_clip = img_clip, train = train, ras_stack_names, use_temp)
+    img_clip<-image_clip(ras, farms, number, width)
+      #extract values, save values
+    e<-extract_training(image_clip = img_clip, train = train, ras_stack_names)
     length(ras_stack_names)
     table(e$class)
     head(e)
     #adjust values
-    as<-adjust_samples(ext_values = e, classes_col = classes_col, samples_per_class = samples_per_class, crop_perc = crop_perc, noncrop_perc = noncrop_perc, built_water_perc = built_water_perc, bare_perc = bare_perc)
+    #get select number from class with the minimum number of samples
+    as<-adjust_samples(ext_values = e, classes_col = classes_col, crop_perc = crop_perc, noncrop_perc = noncrop_perc, built_water_perc = built_water_perc, bare_perc = bare_perc) #, samples_per_class = samples_per_class
     table(as$class)
     head(as)
     #run model, save results
-    s<-svm_model(farms, number, ras_stack_names, plot_width, svm_not_complete, clip_ras, train_samples = as, img_files = img_clip, PreProcess, use_temp)
+    s<-svm_model(farms, number, ras_stack_names, plot_width, svm_not_complete, clip_ras, train_samples = as, img_files = img_clip, PreProcess)
     #plot outcome
     #plot_lc(number, plot_width, farms, img_files =  img_clip)
   }
@@ -130,12 +133,12 @@ batch_all_lcs<-function(site_number){
   }
   
   #clip raster
-  image_clip<-function(ras, farms, number, width, use_temp){
+  image_clip<-function(ras, farms, number, width){
     message("working on image clip")
-    if (file.exists(file.path(tempdir(), "img_clip.tif"))) {
-      m <- stack(file.path(tempdir(), "img_clip.tif"))
-      message("using image in temp file")
-    } else {  #raster input - single or list of rasters
+    # if (file.exists(file.path(tempdir(), "img_clip.tif"))) {
+    #   m <- stack(file.path(tempdir(), "img_clip.tif"))
+    #   message("using image in temp file")
+    # } else {  #raster input - single or list of rasters
       ras1<-stack(ras)
       #vector input
       farms_select<-farms[number,]
@@ -146,26 +149,28 @@ batch_all_lcs<-function(site_number){
       #plot(buff)
       #plot(m[[1]], add=T)
       
-      if (identical(use_temp, TRUE)){
-        temp_file <- writeRaster(m, file.path(tempdir(), "img_clip.tif"))
-      }
+      # if (identical(use_temp, TRUE)){
+      #   temp_file <- writeRaster(m, file.path(tempdir(), "img_clip.tif"))
       message("done with image clip")
-    }
-    #plotRGB(m,
-            # r = 1, g = 2, b = 3,
-            # stretch = "lin",
-            # axes = FALSE, margins=TRUE, main = paste0("img"))
-    return(m)
-  }
+      return(m)
+      }
+# 
+#     }
+  #   #plotRGB(m,
+  #           # r = 1, g = 2, b = 3,
+  #           # stretch = "lin",
+  #           # axes = FALSE, margins=TRUE, main = paste0("img"))
+  #   return(m)
+  # }
   
   # extracting training values from input raster
-  extract_training<-function(image_clip, train, ras_stack_names, use_temp){
+  extract_training<-function(image_clip, train, ras_stack_names){
     message("extract training data")
     #check if values have already been extracted
-    if (identical(file.exists(file.path(temp_dir(),"values_extraction.csv")), TRUE)){
-      message("extraction already completed. moving on...")
-      dfAll2<-read.csv(file.path(outputs,paste0("landcover_",todays_date),"training_values","values_extraction.csv"))
-    }else{
+    # if (identical(file.exists(file.path(tempdir(),"values_extraction.csv")), TRUE)){
+    #   message("extraction already completed. moving on...")
+    #   dfAll2<-read.csv(file.path(outputs,paste0("landcover_",todays_date),"training_values","values_extraction.csv"))
+    # }else{
       message("extracting training values")
       trainData<-train
       responseCol<-"LC6"
@@ -202,17 +207,16 @@ batch_all_lcs<-function(site_number){
       dfAll2<-dfAll[!row.names(dfAll)%in%bad_values,]
       #check for other way missing values have been showing 
       which(apply(dfAll2, 1, function(r) any(r %in% c(-3.400000e+38))))#doesn't seem to be a problme
+      #also look for just NA values
+      dfAll3<-na.omit(dfAll2)
       message("available number of training points:")
-      print(table(dfAll2$class))
-      if (identical(use_temp, TRUE)){write.csv(dfAll2, file.path(temp_dir(),"values_extraction.csv"))}
+      print(table(dfAll3$class))
+      return(dfAll3)
+      # if (identical(use_temp, TRUE)){write.csv(dfAll2, file.path(tempdir(),"values_extraction.csv"))}
     }
-    return(dfAll2)
-    message("available number of training points:")
-    print(table(dfAll2$class))
-    message("done with extraction")
-  }
+
   
-  adjust_samples<-function(ext_values, samples_per_class, classes_col,crop_perc, noncrop_perc, built_water_perc, bare_perc){
+  adjust_samples<-function(ext_values, classes_col,crop_perc, noncrop_perc, built_water_perc, bare_perc){ #samples_per_class, 
     message("adjusting samples")
     #Reclassification and adjust total numbers based on percentage amount
     table(ext_values$class)
@@ -226,17 +230,25 @@ batch_all_lcs<-function(site_number){
     crop<-rbind(corn, soy)
     nrow(crop)
     grass$class<-2
-    woody$class<-2
-    bare$class<-4
-    noncrop<-rbind(grass, woody) #, bare)
+    #some classes don't have any representation at certain sites, so use if statement to avoid error message
+    if (length(woody$class)>0){woody$class<-2}
+    if (length(bare$class)>0){bare$class<-2}
+    noncrop<-rbind(grass, woody, bare)
     nrow(noncrop)
     built$class<-3
-    water$class<-3
+    if (length(water$class)>0){water$class<-3}
     built_water<-rbind(built, water)
     nrow(built_water)
-    all_vals_rcls<-rbind(crop, noncrop, built_water, bare)  #####COMBINE AGAIN
+    all_vals_rcls<-rbind(crop, noncrop, built_water) #, bare)  #####COMBINE AGAIN
     head(all_vals_rcls)
     nrow(all_vals_rcls)
+    t<-table(all_vals_rcls$class)
+    minimum<-min(t[[1]],t[[2]],t[[3]])
+    if (minimum < 200) {
+      samples_per_class<-minimum
+    } else if (minimum > 200) {
+      samples_per_class<-200
+    }
     #then balance the sample
     for (i in 1:length(unique(all_vals_rcls[, classes_col]))){
       class.i <- unique(all_vals_rcls[, classes_col])[i]
@@ -253,14 +265,14 @@ batch_all_lcs<-function(site_number){
     crop2<-all_vals_rcls[all_vals_rcls$class==1,]
     noncrop2<-all_vals_rcls[all_vals_rcls$class==2,]
     built_water2<-all_vals_rcls[all_vals_rcls$class==3,]
-    bare2<-all_vals_rcls[all_vals_rcls$class==4,]
+    #bare2<-all_vals_rcls[all_vals_rcls$class==4,]
     ######ADJUST HERE
     crop3<-crop2[sample(nrow(crop2), (nrow(crop2)*crop_perc)),]
     noncrop3<-noncrop2[sample(nrow(noncrop2), (nrow(noncrop2)*noncrop_perc)),]
     built_water3<-built_water2[sample(nrow(built_water2), (nrow(built_water2)*built_water_perc)),]
-    bare3<-bare2[sample(nrow(bare2), (nrow(bare2)*bare_perc)),]
+    #bare3<-bare2[sample(nrow(bare2), (nrow(bare2)*bare_perc)),]
     #rbind final time
-    output<-rbind(crop3, noncrop3, built_water3, bare3)
+    output<-rbind(crop3, noncrop3, built_water3) #, bare3)
     message("training points adjusted to:")
     print(table(output$class))
     return(output)
@@ -269,10 +281,10 @@ batch_all_lcs<-function(site_number){
   
   
   #SVM CLASSIFICATION
-  svm_model<-function(farms, number, plot_width, svm_not_complete = TRUE, clip_ras, train_samples, img_files, PreProcess = NULL, ras_stack_names, use_temp){
-    if (!identical(svm_not_complete, TRUE)) {
+  svm_model<-function(farms, number, plot_width, svm_not_complete = TRUE, clip_ras, train_samples, img_files, PreProcess = NULL, ras_stack_names){
+    # if (!identical(svm_not_complete, TRUE)) {
       message("working on SVM")
-      balanced<-train_samples
+      balanced<-na.omit(train_samples) #make sure not NAs
       #nb<-length(img_files@layers) #just grabbing the band number length from img
       #dates<-c(paste("d", 1:nb, sep=""), ras_stack_names, "class")
       # ras_layers<-c(ras_stack_names,"class")
@@ -320,52 +332,101 @@ batch_all_lcs<-function(site_number){
       saveRDS(mod.svm, file.path(outputs,paste0("landcover_",todays_date),"svm", paste0("ndvi_3_classes_site_",number,".rds")))
       writeRaster(svm, file.path(outputs,paste0("landcover_",todays_date),"tifs", paste0("site_",number,"_lc_svm.tif")),overwrite=T)
       #control when saving to temp dir
-      if (identical(use_temp, TRUE)){writeRaster(svm, file.path(tempdir(),"svm.tif"), overwrite = T)}
-      if (file.exists(file.path(tempdir(),"svm.tif"))){message("tif also saved to temp directory")}
+      # if (identical(use_temp, TRUE)){writeRaster(svm, file.path(tempdir(),"svm.tif"), overwrite = T)}
+      # if (file.exists(file.path(tempdir(),"svm.tif"))){message("tif also saved to temp directory")}
       return(conf_mat)
       message("done with SVM")
     }
-    else {
-      print(paste0("Has LC been put in memory already? Answer: ", svm_not_complete))
-      message("svm already done. moving on")
-    }
-  }
+  #   else {
+  #     print(paste0("Has LC been put in memory already? Answer: ", svm_not_complete))
+  #     message("svm already done. moving on")
+  #   }
+  # }
   
-  plot_lc<-function(number, plot_width, farms, img_files){
-    message("plotting output")
-    #use LC in temp dir
-    lc_out<-raster(file.path(tempdir(),"svm.tif"))
-    farms_select<-farms[number,]
-    buff200<-gBuffer(farms_select, width = plot_width, capStyle = 'SQUARE')
-    image<-mask(crop(img_files, extent(buff200)), buff200)
-    lc<-mask(crop(lc_out, extent(buff200)),buff200)
-    #get the right color combo
-    if (all(unique(lc) %in% c(1))) {
-      mycol=c("yellow")
-    } else if (all(unique(lc) %in%  c(1,2))) {
-      mycol=c("yellow","olivedrab3")
-    } else if (all(unique(lc) %in%  c(1,3))) {
-      mycol=c("yellow","gray")
-    } else if (all(unique(lc) %in%  c(1,4))) {
-      mycol=c("yellow","blue")
-    } else if (all(unique(lc) %in% c(1,2,3))) {
-      mycol=c("yellow","olivedrab3","gray")
-    } else if (all(unique(lc) %in% c(1,2,3,4))) {
-      mycol=c("yellow","olivedrab3","gray")
-    }
-    par(mfrow=c(1,2))
-    print(raster::plot(lc, col=mycol, legend=F, ext=raster::extent(lc),axes=F,box=F))
-    print(plotRGB(image,
-                  r = 1, g = 2, b = 3,
-                  stretch = "lin",
-                  axes = FALSE, margins=TRUE, main = paste0("img")))
-    par(mfrow=c(1,1))
-    
-  }
+
   ##################################################
   #RUN PRIMARY FUNCTION
   ##################################################
   lc_class(outputs, number)
   ##################################################
+  
 }
 
+
+
+
+#CHECK RESULTS AND PLOT
+# g<-list.files("/Users/adamdixon/Dropbox/A_School/2020_GrassyMargins/2019_data/planet_processing_someoutputs/all_sites/landcover_20200726/tifs", pattern = ".tif$")
+# 
+# for (i in 1:49){
+#   gr<-grep(pattern = paste0("site_",i,"_lc_svm.tif"), g, , value = T)
+#   print(gr)
+# }
+
+# 
+# library(raster)
+# library(rgdal)
+# library(rgeos)
+# 
+# 
+# farms<-readOGR(file.path("/Users/adamdixon/Dropbox/A_School/2020_GrassyMargins/2019_data","sites_shp", "sites_w_data_2019.geojson"))
+# dir<-"/Users/adamdixon/Dropbox/A_School/2020_GrassyMargins/2019_data/planet_processing_someoutputs/all_sites/landcover_20200727/tifs"
+# g<-list.files("/Users/adamdixon/Dropbox/A_School/2020_GrassyMargins/2019_data/planet_processing_someoutputs/all_sites/landcover_20200727/tifs", pattern = ".tif$")
+# #
+# plot_lc<-function(i, g, farms){
+#   message("plotting output")
+#   gr<-grep(pattern = paste0("site_",i,"_lc_svm.tif"), g, value = T)
+#   #use LC in temp dir
+#   lc_out<-raster(file.path(dir,gr))
+#   farms_select<-farms[i,]
+#   buff200<-gBuffer(farms_select, width = 200) #, capStyle = 'SQUARE')
+#   #image<-mask(crop(img_files, extent(buff200)), buff200)
+#   lc<-mask(crop(lc_out, extent(buff200)),buff200)
+#   #get the right color combo
+#   if (all(unique(lc) %in% c(1))) {
+#     mycol=c("yellow")
+#   } else if (all(unique(lc) %in%  c(1,2))) {
+#     mycol=c("yellow","olivedrab3")
+#   } else if (all(unique(lc) %in%  c(1,3))) {
+#     mycol=c("yellow","gray")
+#   } else if (all(unique(lc) %in%  c(1,4))) {
+#     mycol=c("yellow","blue")
+#   } else if (all(unique(lc) %in%  c(2,3))) {
+#     mycol=c("olivedrab3","gray")
+#   }else if (all(unique(lc) %in% c(1,2,3))) {
+#     mycol=c("yellow","olivedrab3","gray")
+#   } else if (all(unique(lc) %in% c(1,2,3,4))) {
+#     mycol=c("yellow","olivedrab3","gray")
+#   }
+#   print(raster::plot(lc, col=mycol, legend=F, ext=raster::extent(lc),axes=F,box=F))
+#   title(farms_select[[1]], line = -2)
+# }
+# 
+# 
+# par(mfrow=c(6,4), mar=c(1,1,1,1))
+# e<-extent(raster(file.path(dir,g[1])))
+# 
+# for (i in 1:24){
+#   plot(e)
+# }
+# 
+# 
+# for (i in c(16, 18, 20, 25, 32, 40, 42, 43, 49)){
+#   plot_lc(i=i, g=g, farms=farms)
+# }
+# 
+# 
+# #put outputs into directory
+# output_dir<-"/Users/adamdixon/Dropbox/A_School/2020_GrassyMargins/2019_data/planet_processing_someoutputs/all_sites/landcover_20200726/"
+# plots.dir.path <- list.files(tempdir(), pattern="rs-graphics", full.names = TRUE);
+# plots.png.paths <- list.files(plots.dir.path, pattern=".png", full.names = TRUE)
+# file.copy(from=plots.png.paths, to=output_dir)
+# 
+# plots.png.details <- file.info(plots.png.paths)
+# plots.png.details <- plots.png.details[order(plots.png.details$mtime),]
+# sorted.png.names <- gsub(plots.dir.path, output_dir, row.names(plots.png.details), fixed=TRUE)
+# numbered.png.names <- paste0(output_dir, 1:length(sorted.png.names), ".png")
+# 
+# # Rename all the .png files as: 1.png, 2.png, 3.png, and so on.
+# file.rename(from=sorted.png.names, to=numbered.png.names)
+# #look within NDVI scenes for odd outliers and remove if necessary
