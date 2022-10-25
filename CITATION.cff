@@ -4,9 +4,6 @@ authors:
 - family-names: "Dixon"
   given-names: "A.P."
   orcid: "https://orcid.org/0000-0002-1358-6317"
-- family-names: "Dixon"
-  given-names: "A.P."
-  orcid: "https://orcid.org/00000-0002-1358-6317"
 title: "dissertation"
 version: 1.0.0
 doi: 10.5281/zenodo.1234
