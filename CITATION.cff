@@ -6,6 +6,6 @@ authors:
   orcid: "https://orcid.org/0000-0002-1358-6317"
 title: "dissertation"
 version: 1.0.0
-doi: 10.5281/zenodo.1234
+doi: https://doi.org/10.5281/zenodo.6465342
 date-released: 2022-10-25
 url: "https://github.com/adampdixon/dissertation"
