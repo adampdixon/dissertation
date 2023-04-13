@@ -1,69 +1,68 @@
-#data synthesis 16 April 2022
-# Adam Dixon
+# Data synthesis 9 April 2023
+# For manuscript: Passive monitoring of working lands
+# Ecological Applications
+#
+# Adam Dixon, Matthew Baker, Erle Ellis
 # 
-library(plyr)
-library(dplyr)
+library(plyr) # table processing
+library(dplyr) # table processing
 library(rsq) #adj R sq
 library(wiqid) #AICc
 library(ggplot2) # vis
 library(gridExtra) # vis
-# library(caret)
-library(RVAideMemoire) #for spearman CIs in RCC
-library(MuMIn) # Model averaging
-# library(ggrepel)
+library(RVAideMemoire) #for spearman CIs in spatial extent analysis
 library(sf) # for spatial autocorrelation test
-library(spdep)
+library(spdep) # for spatial autocorrelation test
 library(cocor) # for comparing correlations at two spatial extents
+library(stargazer) # for final regression summary table
 
 # todays date for use in output naming
 todays_date<-gsub("-","",Sys.Date())
 
-directory<-"C:\\Users\\dixona\\Dropbox\\A_School\\2020_GrassyMargins\\3_AcousticAgLandscapes\\data"
+directory<-"C:\\Users\\dixona\\Dropbox\\A_School\\2020_GrassyMargins\\3_AcousticAgLandscapes\\MS_4Pub\\submission 1 - Ecological Applications\\Final_accepted_article"
 
-data_all<-as_tibble(read.csv(file.path(directory, "dixon_agriculture_acoutics_2019.csv"))) %>%
-  mutate(VBR = VBRICH,
-         buffer = Extent_meters,
-         site = location,
-         GLCM_Dissimilarity = Texture_Dis,
-         GLCM_Variance = Texture_Var)
+# Load zonodo data
 
+data_all<-as_tibble(read.csv(file.path(directory, "dixon_eco_applications.csv")))
 
-#Check Moran's I for vocalizing bird richness value to determine spatial autocorrelation is a problem
+#Check Moran's I for vocalizing bird richness value to assess if spatial autocorrelation is a problem
 #
-#Note this data is not publicly available
+# Note this analysis included here for review but is not publicly available because the geographic coordinates have been removed. Contact Adam Dixon (adam.dixon@wwfus.org for coordinates.)
 #
-points = st_as_sf(filter(data_all, buffer == 300), coords = c("UTM_Longitude", "UTM_Latitude"), crs = 32615)
-coords <- coordinates(as(points, "Spatial"))
-col.knn <- knearneigh(points, k=4)
+# points = st_as_sf(filter(data_all, buffer == 300), coords = c("UTM_Longitude", "UTM_Latitude"), crs = 32615)
+# coords <- coordinates(as(points, "Spatial"))
+# col.knn <- knearneigh(points, k=4)
+# 
+# nb<-knn2nb(col.knn)
+# 
+# plot(nb, coords)
+# title(main="K nearest neighbours, k = 4")
+# 
+# plot(st_geometry(points))
+# hist(points$VBRICH, main=NULL)
+# shapiro.test(points$VBR) # normally distributed? yes
+# boxplot(points$VBR, horizontal = TRUE)
+# 
+# lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+# 
+# lw$weights[1]
+# 
+# I <- moran(points$VBR, lw, length(nb), Szero(lw))[1]
+# I
+# moran.test(points$VBR,lw, alternative="greater")
+# 
+# MC<- moran.mc(points$VBR, lw, nsim=10000, alternative="greater")
+# MC
+# plot(MC)
 
-nb<-knn2nb(col.knn)
+# It appears that there is no evidence for spatial autocorrelation
 
-plot(nb, coords)
-title(main="K nearest neighbours, k = 4")
+# Publicly available analysis starts here
 
-plot(st_geometry(points))
-hist(points$VBRICH, main=NULL)
-shapiro.test(points$VBR) # normally distributed? yes
-boxplot(points$VBR, horizontal = TRUE)
-
-lw <- nb2listw(nb, style="W", zero.policy=TRUE)
-
-lw$weights[1]
-
-I <- moran(points$VBR, lw, length(nb), Szero(lw))[1]
-I
-moran.test(points$VBR,lw, alternative="greater")
-
-MC<- moran.mc(points$VBR, lw, nsim=10000, alternative="greater")
-MC
-plot(MC)
-
-# it appears that there is no evidence for spatial autocorrelation
-
-#Look at the response correlation curve
+# Look at the response correlation curve to determine impact of spatial extent
 rcc<-function(x) {
-  d = filter(data_all, buffer == x)
-  correlation <- cor.test(d$Noncrop_perc, d$VBR, method = c("pearson"), conf.level = .95)
+  d = filter(data_all, Extent_meters == x)
+  correlation <- cor.test(d$Noncrop_perc, d$VBRICH, method = c("pearson"), conf.level = .95)
   r.rc <- data.frame(rho=correlation$estimate,lower=ifelse(correlation$conf.int[[1]]<0,0,correlation$conf.int[[1]]),upper=correlation$conf.int[[2]],p=correlation$p.value)
   return(r.rc)
 }
@@ -78,15 +77,12 @@ rcc.table
 col1<-c("All_data"="blue")
 col2<-c("Same_date"="red")
 ggplot(rcc.table, aes(x=seq(100,1000,100))) +
-  #geom_line(aes(y=rho, color="All_data"), linetype = "solid", size=.75) +
   geom_point(aes(y=rho), size = 2, stroke = 0.5, shape = 1) +
   geom_point(aes(y=rho), size = 2, stroke = 0.5, shape = 3) +
   geom_errorbar(aes(ymin=lower, ymax=upper), width=0.1, linetype="dashed", color = "gray") +
   scale_colour_manual(name="Error Bars",values=col1) +
-  #ggtitle("Songbird richness and noncrop correlation at each circle buffer") +
   scale_x_continuous("Spatial extent (m)", seq(from=0, to=1000, by = 100)) +
   scale_y_continuous("Corr. coeff.", breaks = seq(0,1,.1)) +
-  #ggtitle("Correlation of noncrop and species richness across anlaysis extents") +
   theme_classic()+
   theme(legend.position = "none", plot.margin=unit(c(1,1,1,1),"cm"), axis.text.x = element_text(angle = 90))
 
@@ -98,18 +94,18 @@ ggplot(rcc.table, aes(x=seq(100,1000,100))) +
 #planetTo100.rccs
 paste("The highest corr coeff for noncrop is, ", round(max(rcc.table$rho), digits = 4))
 paste("The lowest corr coeff for noncrop is, ", round(min(rcc.table$rho), digits = 4))
-paste("The sample size is, ", nrow(filter(data_all, buffer == 100)))
+paste("The sample size is, ", nrow(filter(data_all, Extent_meters == 100)))
 # 
 
 # Check out scatterplot of both spatial extents
-both_extents<-select(filter(data_all, buffer == 100 | buffer == 300), VBR, Noncrop_perc, buffer)%>%
-  dplyr::mutate(spatial_extent = as.factor(buffer)) # buffer needs to be nonnumeric
+both_extents<-select(filter(data_all, Extent_meters == 100 | Extent_meters == 300), VBRICH, Noncrop_perc, Extent_meters)%>%
+  dplyr::mutate(spatial_extent = as.factor(Extent_meters)) # Extent_meters needs to be nonnumeric
 nrow(both_extents)
 head(both_extents)
 
 
 # look at the two groups with linear model
-ggplot(both_extents, aes(x = Noncrop_perc, y = VBR, 
+ggplot(both_extents, aes(x = Noncrop_perc, y = VBRICH, 
                      colour = spatial_extent)) +
   geom_jitter() +
   geom_smooth(method = "lm") +
@@ -117,13 +113,13 @@ ggplot(both_extents, aes(x = Noncrop_perc, y = VBR,
   scale_colour_viridis_d(option = "E")
 
 
-for_cocor<-data.frame(VBR = filter(both_extents, buffer == 300)$VBR,
-                      Noncrop100 = filter(both_extents, buffer == 100)$Noncrop_perc,
-                      Noncrop300=filter(both_extents, buffer == 300)$Noncrop_perc)
+for_cocor<-data.frame(VBRICH = filter(both_extents, Extent_meters == 300)$VBRICH,
+                      Noncrop100 = filter(both_extents, Extent_meters == 100)$Noncrop_perc,
+                      Noncrop300=filter(both_extents, Extent_meters == 300)$Noncrop_perc)
 
 # Using test for overlapping populations
 #https://psyteachr.github.io/msc-conv/comparing-two-correlations.html
-cocor(formula = ~VBR + Noncrop100 | VBR + Noncrop300, data = for_cocor)
+cocor(formula = ~VBRICH + Noncrop100 | VBRICH + Noncrop300, data = for_cocor)
 
 #This test suggests the correlations are significantly different and that the 300 m spatial extent should be used
 
@@ -132,14 +128,16 @@ cocor(formula = ~VBR + Noncrop100 | VBR + Noncrop300, data = for_cocor)
 ##############################################################################################################
 
 
-#What is the noncrop proportion is across sites
-bar<-ggplot(data = filter(data_all, buffer == 300), aes(x = reorder(site, -Noncrop_perc), y = Noncrop_perc)) + geom_bar(stat="identity",fill = "grey50") + xlab("site location") + ylab("Noncrop (%) within 300m") +
+#What is the noncrop proportion is across sites?
+bar<-ggplot(data = filter(data_all, Extent_meters == 300), aes(x = reorder(location, -Noncrop_perc), y = Noncrop_perc)) + geom_bar(stat="identity",fill = "grey50") + xlab("site location") + ylab("Noncrop (%) within 300m") +
   theme_classic() +
   theme(axis.text.x = element_text(size = 10, angle = 90))
 bar
 
 
-data = select(filter(data_all, buffer == 300), Noncrop_perc)
+data = select(filter(data_all, Extent_meters == 300), Noncrop_perc)
+
+#Histogram of noncrop vegetation
 
 barlines <- "#1F3552"
 
@@ -149,9 +147,7 @@ p7 <- ggplot(data, aes(x = Noncrop_perc)) +
   scale_x_continuous(name = "Noncrop (%) within 300 m") +
   scale_y_continuous(name = "Count") +
   theme_classic()
-  # scale_x_continuous(breaks = seq(0, 80, 20),
-  #                    limits=c(0, 80)) +
-  # scale_y_continuous(name = "Count")
+
 p7
 
 library(ggpubr)
@@ -165,25 +161,8 @@ figure
 ##################### POISSON REGRESSION
 
 
-# Scale texture variables from 0 to 1
-scale1to0 <- function(x){(x-min(x))/(max(x)-min(x))}
-
-# just get data from spatial extent
-data_spatial_extent <- filter(data_all, buffer == 300)%>%
-  dplyr::mutate(Texture_Dis = scale1to0(GLCM_Dissimilarity), Texture_Var = scale1to0(GLCM_Variance))%>%
-  dplyr::mutate(Noncrop_tex_dis = Texture_Dis*Noncrop_perc,
-         Noncrop_tex_var = Texture_Var*Noncrop_perc)%>%
-  select(site,
-         buffer,
-         VBR,
-         Noncrop_perc,
-         Noncrop_m2,
-         Texture_Dis,
-         Texture_Var,
-         Noncrop_tex_dis,
-         Noncrop_tex_var,
-         Pesticide,
-         Fertilizer)
+# Get data from spatial extent with highest correlation
+data_spatial_extent <- filter(data_all, Extent_meters == 300)
 
 ##############################################################################################################
 ##############################################################################################################
@@ -191,31 +170,14 @@ data_spatial_extent <- filter(data_all, buffer == 300)%>%
 
 #https://sites.google.com/site/rforfishandwildlifegrads/home/mumin_usage_examples
 
-### Making just a simple correlation matrix
+### Make a simple correlation matrix
 set.seed(1164)
 
 library(tidyverse)
 library(Hmisc)
-#This one below is easier to convert to excel
+#This is easy to convert to excel
 #https://www.r-bloggers.com/2020/07/create-a-publication-ready-correlation-matrix-with-significance-levels-in-r/
 #' correlation_matrix
-#' Creates a publication-ready / formatted correlation matrix, using `Hmisc::rcorr` in the backend.
-#'
-#' @param df dataframe; containing numeric and/or logical columns to calculate correlations for
-#' @param type character; specifies the type of correlations to compute; gets passed to `Hmisc::rcorr`; options are `"pearson"` or `"spearman"`; defaults to `"pearson"`
-#' @param digits integer/double; number of decimals to show in the correlation matrix; gets passed to `formatC`; defaults to `3`
-#' @param decimal.mark character; which decimal.mark to use; gets passed to `formatC`; defaults to `.`
-#' @param use character; which part of the correlation matrix to display; options are `"all"`, `"upper"`, `"lower"`; defaults to `"all"`
-#' @param show_significance boolean; whether to add `*` to represent the significance levels for the correlations; defaults to `TRUE`
-#' @param replace_diagonal boolean; whether to replace the correlations on the diagonal; defaults to `FALSE`
-#' @param replacement character; what to replace the diagonal and/or upper/lower triangles with; defaults to `""` (empty string)
-#'
-#' @return a correlation matrix
-#' @export
-#'
-#' @examples
-#' `correlation_matrix(iris)`
-#' `correlation_matrix(mtcars)`
 correlation_matrix <- function(df, 
                                type = "pearson",
                                digits = 3, 
@@ -301,13 +263,13 @@ save_correlation_matrix = function(df, filename, ...) {
 
 # save to excel file for manuscript fig
 ds_cor <-data_spatial_extent %>%
-  select(VBR, Noncrop_perc, Pesticide, Fertilizer, Texture_Dis, Texture_Var) %>%
-  save_correlation_matrix(paste0(file.path(figs, "corr_matrix", "corrmatrix"), todays_date, ".csv"), digits = 2, use = 'lower')
+  select(VBRICH, Noncrop_perc, Texture_Dis, Texture_Var) %>%
+  save_correlation_matrix(paste0(file.path(directory, "corrmatrix"), todays_date, ".csv"), digits = 2, use = 'lower')
 
 
 # or just plot out here
 ds_cor <- data_spatial_extent %>%
-  select(VBR, Noncrop_perc, Pesticide, Fertilizer, Texture_Dis, Texture_Var) %>%
+  select(VBRICH, Noncrop_perc, Texture_Dis, Texture_Var) %>%
   as.matrix() %>%
   rcorr(type = "pearson")
 
@@ -387,14 +349,14 @@ my_custom_diag <- function(data, mapping, ...) {
 }
 
 
-# #This is to see the format of the linear model plots
+# #This is to see the format of the linear model plots without running the entire pair plot
 my_custom_smooth(data_spatial_extent, aes(Noncrop_perc, Texture_Var))
 my_custom_diag(data_spatial_extent, aes(Noncrop_perc))
 
 
 data_spatial_extent%>%
   mutate(interaction = Noncrop_perc*Texture_Var) %>%
-  select(VBR, Noncrop_perc, Texture_Var, interaction) %>%
+  select(VBRICH, Noncrop_perc, Texture_Var, interaction) %>%
   ggpairs(
     upper = list(continuous = my_custom_smooth), 
     lower = list(continuous = my_custom_cor),
@@ -405,7 +367,7 @@ data_spatial_extent%>%
 ################################################################
 
 
-#Instead of reporting R2, we should report explained deviance, following Zuur et al. 2009
+# In Poisson regression, instead of reporting R2, we should report explained deviance, following Zuur et al. 2009
 # This is the function for that
 exdev<-function(x) {
   ndev<-x$null.deviance
@@ -413,190 +375,99 @@ exdev<-function(x) {
   return(100*(((ndev-rdev)/ndev)))
 }
 
-#First, fit candidate linear models to explain variation in density
-mod1<-glm(VBR~Noncrop_perc, data = data_spatial_extent, family = "poisson")
-mod2<-glm(VBR~Texture_Var, data = data_spatial_extent, family = "poisson")
-mod3<-glm(VBR~Pesticide, data = data_spatial_extent, family = "poisson")
 
-mod4<-glm(VBR~Noncrop_perc + Texture_Var, data = data_spatial_extent, family = "poisson") 
-mod5<-glm(VBR~Noncrop_perc + Pesticide, data = data_spatial_extent, family = "poisson") 
-mod6<-glm(VBR~Texture_Var + Pesticide, data = data_spatial_extent, family = "poisson") 
-mod7<-glm(VBR~Noncrop_perc + Texture_Var + Pesticide, data = data_spatial_extent, family = "poisson") 
+#######################################################
+###################################################### Poisson Regression
 
-mod8<-glm(VBR~Noncrop_perc:Texture_Var, data = data_spatial_extent, family = "poisson") 
-mod9<-glm(VBR~Noncrop_perc*Pesticide, data = data_spatial_extent, family = "poisson") 
-mod10<-glm(VBR~Noncrop_perc*Texture_Var + Pesticide, data = data_spatial_extent, family = "poisson") 
-mod11<-glm(VBR~Noncrop_perc*Pesticide + Texture_Var, data = data_spatial_extent, family = "poisson")
-mod12<-glm(VBR~Noncrop_perc*Texture_Var + Noncrop_perc + Texture_Var, data = data_spatial_extent, family = "poisson")
+# Models with all species richness (VBRICH)
 
-summary(mod1)
-exdev(mod1)
-summary(mod2)
-exdev(mod2)
-summary(mod3)
-exdev(mod3)
-summary(mod4)
-exdev(mod4)
-summary(mod5)
-exdev(mod5)
-summary(mod6)
-exdev(mod6)
-summary(mod7)
-exdev(mod7)
-summary(mod8)
-exdev(mod8)
-summary(mod9)
-exdev(mod9)
-summary(mod10)
-exdev(mod10)
-AICc(mod10)
-summary(mod11)
-exdev(mod11)
-AICc(mod11)
-summary(mod12)
-exdev(mod12)
-AICc(mod12)
+mod1<-glm(VBRICH~Noncrop_perc, data = data_spatial_extent, family = "poisson") 
+mod2<-glm(VBRICH~Texture_Var, data = data_spatial_extent, family = "poisson")
+mod3<-glm(VBRICH~Noncrop_perc + Texture_Var, data = data_spatial_extent, family = "poisson") 
+mod4<-glm(VBRICH~Noncrop_perc*Texture_Var, data = data_spatial_extent, family = "poisson")
 
+# Models with just grassland bird species richness 
 
-#MODEL AVERAGING
+mod1g<-glm(VBRICH_Grass~Noncrop_perc, data = data_spatial_extent, family = "poisson") 
+mod2g<-glm(VBRICH_Grass~Texture_Var, data = data_spatial_extent, family = "poisson")
+mod3g<-glm(VBRICH_Grass~Noncrop_perc + Texture_Var, data = data_spatial_extent, family = "poisson") 
+mod4g<-glm(VBRICH_Grass~Noncrop_perc*Texture_Var, data = data_spatial_extent, family = "poisson")
 
-a<-AICc(mod1,mod2,mod3,mod4,mod5,mod6,mod7,mod8,mod9,mod10,mod11,mod12)
-model_order<-a[order(a$AICc, decreasing = F),]
-model_order
-model_order_names<-rownames(model_order)
+# Models with just Non-grassland bird species richness 
 
-# MODEL AVERAGED
-models2<-list(mod8,mod5,mod1,mod4)
-avg_mod<-model.avg(models2)
-summary(avg_mod)
+mod1ng<-glm(VBRICH_Nongrass ~Noncrop_perc, data = data_spatial_extent, family = "poisson") 
+mod2ng<-glm(VBRICH_Nongrass ~Texture_Var, data = data_spatial_extent, family = "poisson")
+mod3ng<-glm(VBRICH_Nongrass~Noncrop_perc + Texture_Var, data = data_spatial_extent, family = "poisson") 
+mod4ng<-glm(VBRICH_Nongrass~Noncrop_perc*Texture_Var, data = data_spatial_extent, family = "poisson")
 
-# Look at effect sizes
-library(effectsize)
-std<-standardize_parameters(avg_mod, method = "refit", two_sd = TRUE, exponentiate = T)
-std
+# # prepare for table
 
-#https://rpubs.com/rowlandw17/456945 # article on model averaging
+l<-as.list(c('mod1', 'mod2', 'mod3', 'mod4',
+             'mod1g', 'mod2g', 'mod3g', 'mod4g',
+             'mod1ng', 'mod2ng', 'mod3ng', 'mod4ng'))
 
-coef1<-coefficients(avg_mod, full = F)
-c<-data.frame(coef1)
-#Get confidence 95% confidence intervals of avg_mod
-ci1 <- confint(avg_mod, full=F)
-ci<-data.frame(ci1)
-results<-as_tibble(cbind(row.names(c),c, ci))
-names(results)<-c("term","estimate","conf.low","conf.high")
+# model_order_names
 
-results1<-filter(results, term == "Noncrop_perc:Texture_Var" | term == "Noncrop_perc")
-library(dotwhisker)
-dwplot(results) +
-  # xlim(0, .02) +
-  theme_classic()
+models<-list(mod1, mod2, mod3, mod4, 
+             mod1g, mod2g, mod3g, mod4g,
+             mod1ng, mod2ng, mod3ng, mod4ng)
+# model_column_names<-c('Mod8','Mod5','Mod1','Mod4','Mod7','Mod9','Mod12', 'Mod3','Mod11', 'Mod10', 'Mod6','Mod2')
+model_column_names<-c('Model 1','Model 2','Model 3','Model 4',
+                      'Model 1A','Model 2A','Model 3A','Model 4A',
+                      'Model 1B','Model 2B','Model 3B','Model 4B')
 
-results2<-filter(results, term != "Noncrop_perc:Texture_Var" | term != "Noncrop_perc")
-library(dotwhisker)
-dwplot(results2) +
-  # xlim(0, .02) +
-  theme_classic()
-
-# PLOT OF ONLY NONCROP AND INTERACTION
-
-noncrop<-ggplot(data = data_spatial_extent) +
-  geom_point(aes(Noncrop_perc,VBR), size = .8) +
-  geom_smooth(aes(Noncrop_perc,VBR), method = "glm", method.args = list(family = "poisson"),
-              color = "black", size=0.5, fill = "lightgray") +
-  xlim(0, 100) +
-  ylim(5, 30) +
-  labs(y="VBRICH", x = "NC%") +
-  annotate("text", x=32, y=28, label= paste0("Exp. dev. = ", round(exdev(mod1), 1), "%")) +
-  annotate("text", x=27, y=25, label= paste0("AICc = ", round(AICc(mod1), 1))) +
-  theme_classic()
-
-
-noncroptexture_interaction<-ggplot(data = data_spatial_extent) +
-  geom_point(aes(Noncrop_perc*Texture_Var, VBR), size = .8) +
-  geom_smooth(aes(Noncrop_perc*Texture_Var,VBR), method = "glm", method.args = list(family = "poisson"),
-              color = "black", size=0.5, fill = "lightgray") +
-  xlim(0, 100) +
-  ylim(5, 30) +
-  labs(y="VBRICH", x = "NC % x TVAR") +
-  annotate("text", x=32, y=28, label= paste0("Exp. dev. = ", round(exdev(mod8), 1), "%")) +
-  annotate("text", x=27, y=25, label= paste0("AICc = ", round(AICc(mod8), 1))) +
-  theme_classic()
-
-grid.arrange(noncrop, noncroptexture_interaction, ncol = 2)
-
-
-
-
-
-# PREDICTED VS OBSERVED
-
-predicted_data<-predict(avg_mod, select(data_spatial_extent, Noncrop_perc, Pesticide, Texture_Var), full = T, type= 'response')
-
-pred.df<-data.frame(Observed = data_spatial_extent$VBR, Predicted = predicted_data)
-
-cor(pred.df$Observed, pred.df$Predicted)
-
-
-ggplot(data = pred.df, aes(Observed,Predicted)) +
-  geom_point(shape = 1) +
-  stat_smooth(method = "lm", color = "black", size=0.5, fill = "gray78") +
-  stat_regline_equation(aes(label =  ..adj.rr.label..)) +
-  # annotate("text", x = 11, y = 21, label ="paste(italic(R), \" = .68, \", italic(p), \" = .0000\")", parse = TRUE) +
-  # stat_cor(label.x = 7, label.y = 21, p.digits = 2) +
-  xlim(7, 25) +
-  ylim(7, 25) +
-  labs(y="Predicted VBRICH", x = "Observed VBRICH") +
-  scale_color_manual(values = c("#353436")) +
-  theme_classic()
-
-summary(lm(Predicted ~ Observed, data = pred.df))
-
-
-
-
-# prepare for table
-model_order_names
-
-l<-as.list(c('mod8','mod1','mod5','mod4','mod7','mod9','mod12', 'mod3','mod11', 'mod10', 'mod6','mod2'))
-
-#to get AICc into stargazer
+#to get AIC into stargazer
 AICc_vector<-c("AICc")
-for (i in 1:length(l)){
-  AICc_vector<-c(AICc_vector, round(wiqid::AICc(eval(parse(text = l[[i]]))),1))
-}
-#place vector in list for stargazer
-AICc_list<-list(AICc_vector)
-
-#to get explained deviance into stargazer
 exdev_vector<-c("Explained deviance")
 for (i in 1:length(l)){
+  AICc_vector<-c(AICc_vector, round(wiqid::AICc(eval(parse(text = l[[i]]))),1))
   exdev_vector<-c(exdev_vector, round(exdev(eval(parse(text = l[[i]]))),1))
 }
 #place vector in list for stargazer
+AICc_list<-list(AICc_vector)
 exdev_list<-list(exdev_vector)
 
-model_order_names
 
-models<-list(mod8,mod1,mod5,mod4,mod7,mod9,mod12, mod3,mod11,mod10, mod6,mod2)
-# model_column_names<-c('Mod8','Mod5','Mod1','Mod4','Mod7','Mod9','Mod12', 'Mod3','Mod11', 'Mod10', 'Mod6','Mod2')
-model_column_names<-c('Model8','Model1','Model5','Model4','Model7','Model9','Model12', 'Model3','Model11', 'Model10', 'Model6','Model2')
 
-library(stargazer)
 stargazer(models,
           add.lines=c(AICc_list,exdev_list),
-          column.labels = model_column_names,
-          covariate.labels = c("Noncrop Percent x Texture", "Noncrop percent","Pesticide", "Texture", "Noncrop percent x Pesticide"),
-          dep.var.caption  = "Non-crop habitat within 300 m of acoustic recorder",
-          dep.var.labels   = "Dependent variable: Vocalizing bird richness",
+          column.labels = model_column_names,# model_column_names,
+          covariate.labels = c("Noncrop percent", "Noncrop Texture", 
+                               "Noncrop percent x Noncrop Texture"),
+          dep.var.caption  = "Habitat within 300 m of acoustic recorder",
+          dep.var.labels   = c("VBRICH", "VBRICH Grassland", "VBRICH Non-grassland"),
           star.cutoffs = c(0.05, 0.01, 0.001),
           align=FALSE,
           no.space = TRUE,
-          type="html", out = paste0(file.path(figs, "regression_outs"), "//at300m_stargazer_", todays_date,".txt"))
+          report = ('vcps'),
+          ci=T,
+          model.numbers=FALSE,
+          keep.stat=c("n"),
+          type="text",
+          omit = c("Constant")
+          # out = paste0(file.path(figs, "regression_outs"), "//at300m_stargazer_", todays_date,".html"))
+)
 
 
-for (i in model_order_names){
-  model_number <- substring(i, nchar(i), nchar(i))
-  cat(paste0("<td>Mod. ", model_number,"</td>"))
-}
-###############################################################################################################################
-###############################################################################################################################
+# For final plot, make VBRICH across all types (All, Grassland, Nongrassland) a single column
+
+vbrich<-mutate(data_spatial_extent, type="VBRICH")%>%select(location, Noncrop_perc, VBRICH, type)
+vbrich_nongrass<-mutate(select(data_spatial_extent, -VBRICH), VBRICH = VBRICH_Nongrass,  type="VBRICH Non-grassland")%>%select(location, Noncrop_perc, VBRICH, type)
+vbrich_grass<-mutate(select(data_spatial_extent, -VBRICH), VBRICH = VBRICH_Grass, type="VBRICH Grassland")%>%select(location, Noncrop_perc, VBRICH, type)
+
+vbrich_all<-rbind(vbrich, vbrich_nongrass, vbrich_grass)
+vbrich_all
+
+
+ggplot(vbrich_all, aes(x= Noncrop_perc, y=VBRICH, color=type, linetype = type)) +
+  geom_point(aes(shape = type), size = 2.5) +
+  scale_shape_manual(values = c(1,2,0)) +
+  geom_smooth(method = "glm", method.args = list(family = "poisson"), size=.5) +
+  scale_color_manual(values=c("#000000", "#004D40", "#1E88E5")) +
+  xlab("Noncrop %") +
+  ylab("VBRICH") +
+  theme_classic() +
+  theme(legend.title=element_blank())
+
+# for plotting high res
+# ggsave(path = file.path(final_figs), filename = 'scatterplot.tif', width = 6, height = 4, device='tiff', dpi=700)
