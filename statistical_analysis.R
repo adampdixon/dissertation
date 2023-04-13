@@ -19,7 +19,7 @@ library(stargazer) # for final regression summary table
 # todays date for use in output naming
 todays_date<-gsub("-","",Sys.Date())
 
-directory<-"C:\\Users\\dixona\\Dropbox\\A_School\\2020_GrassyMargins\\3_AcousticAgLandscapes\\MS_4Pub\\submission 1 - Ecological Applications\\Final_accepted_article"
+directory<-"C:\\" # Put directory here
 
 # Load zonodo data
 
